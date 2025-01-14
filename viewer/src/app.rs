@@ -89,7 +89,7 @@ impl eframe::App for App {
                     ewebsock::WsEvent::Closed => {
                         let ctx = ctx.clone();
                         let wakeup = move || ctx.request_repaint();
-                        self.ws = ewebsock::connect_with_wakeup(&self.server, wakeup)
+                        self.ws = ewebsock::connect_with_wakeup(&self.server, Default::default(), wakeup)
                             .map_err(|e| log::error!("failed to init websocket {}", e))
                             .ok();
                         break;
@@ -99,7 +99,7 @@ impl eframe::App for App {
         }
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
-                egui::widgets::global_dark_light_mode_switch(ui);
+                egui::widgets::global_theme_preference_switch(ui);
                 ui.separator();
                 ui.menu_button("File", |ui| {
                     #[cfg(not(target_arch = "wasm32"))]
@@ -112,7 +112,7 @@ impl eframe::App for App {
                             self.save_dialog = Some(fd);
                         }
                         if ui.button("Quit").clicked() {
-                            _frame.close();
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
                     }
                 });
@@ -133,7 +133,7 @@ impl eframe::App for App {
                         }
                     });
                 });
-                egui::widgets::reset_button(ui, &mut self.values);
+                egui::widgets::reset_button(ui, &mut self.values, "Reset");
                 ui.separator();
                 if ui.button("XY Graph").clicked() {
                     self.windows.push((
@@ -152,7 +152,7 @@ impl eframe::App for App {
                     if ui.button("connect").clicked() {
                         let ctx = ctx.clone();
                         let wakeup = move || ctx.request_repaint();
-                        self.ws = ewebsock::connect_with_wakeup(&self.server, wakeup)
+                        self.ws = ewebsock::connect_with_wakeup(&self.server, Default::default(), wakeup)
                             .map_err(|e| log::error!("failed to init websocket {}", e))
                             .ok();
                     }
@@ -202,7 +202,8 @@ impl App {
                 });
             })
             .body(|body| {
-                body.rows(20.0, keys.len(), |index, mut row| {
+                body.rows(20.0, keys.len(), |mut row| {
+                    let index = row.index();
                     let key = keys[index];
                     row.col(|ui| {
                         if ui.button("G").clicked() {

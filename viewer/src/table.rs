@@ -34,7 +34,7 @@ impl TableWindow {
     }
     pub fn ui(&mut self, ui: &mut Ui, values: &Values) {
         ScrollArea::horizontal()
-            .id_source(self.id.with("header"))
+            .id_salt(self.id.with("header"))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for key in values.keys() {
@@ -81,7 +81,8 @@ impl TableWindow {
                     .map(|v| v.as_ref().map(|v| v.len()).unwrap_or_default())
                     .max()
                     .unwrap_or_default();
-                body.rows(20.0, max_len, |index, mut row| {
+                body.rows(20.0, max_len, |mut row| {
+                    let index = row.index();
                     for iter in values.iter_mut() {
                         row.col(|ui| {
                             if let Some(it) = iter.as_mut() {

@@ -89,7 +89,7 @@ impl LineGraph {
 
     pub fn ui(&mut self, ui: &mut Ui, values: &Values) {
         ScrollArea::horizontal()
-            .id_source(self.id.with("header"))
+            .id_salt(self.id.with("header"))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for key in values.keys() {
@@ -109,7 +109,7 @@ impl LineGraph {
             .legend(Legend::default().position(self.legend_position.into()))
             .x_axis_position(self.x_axis_position.into())
             .y_axis_position(self.y_axis_position.into())
-            .y_axis_width(5)
+            .y_axis_min_width(5.0)
             .show_axes(true)
             .show_grid(true)
             .show(ui, |ui| {
@@ -176,14 +176,14 @@ impl XYGraph {
 
     pub fn ui(&mut self, ui: &mut Ui, values: &Values) {
         ui.horizontal(|ui| {
-            egui::ComboBox::from_id_source(self.id.with("x_selector"))
+            egui::ComboBox::from_id_salt(self.id.with("x_selector"))
                 .selected_text(&self.selector.0)
                 .show_ui(ui, |ui| {
                     for key in values.keys() {
                         ui.selectable_value(&mut self.selector.0, key.to_owned(), key);
                     }
                 });
-            egui::ComboBox::from_id_source(self.id.with("y_selector"))
+            egui::ComboBox::from_id_salt(self.id.with("y_selector"))
                 .selected_text(&self.selector.1)
                 .show_ui(ui, |ui| {
                     for key in values.keys() {
@@ -217,7 +217,7 @@ impl XYGraph {
             .legend(Legend::default().position(self.legend_position.into()))
             .x_axis_position(self.x_axis_position.into())
             .y_axis_position(self.y_axis_position.into())
-            .y_axis_width(5)
+            .y_axis_min_width(5.0)
             .show_axes(true)
             .show_grid(true)
             .data_aspect(1.0)

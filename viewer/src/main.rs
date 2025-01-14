@@ -10,15 +10,16 @@ fn main() -> eframe::Result<()> {
     env_logger::init();
 
     let native_options = eframe::NativeOptions {
-        initial_window_size: Some(egui::vec2(640.0, 480.0)),
-        min_window_size: Some(egui::vec2(640.0, 480.0)),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size(egui::vec2(640.0, 480.0))
+            .with_min_inner_size(egui::vec2(640.0, 480.0)),
         ..Default::default()
     };
 
     eframe::run_native(
         "sw_logger",
         native_options,
-        Box::new(|cc| Box::new(app::App::new(cc))),
+        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
     )
 }
 
