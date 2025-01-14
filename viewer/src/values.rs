@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::File,
-    io::{BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     path::Path,
 };
 
@@ -100,6 +100,26 @@ impl Values {
             .as_ref()
             .and_then(|v| v.back())
             .cloned()
+    }
+
+    pub fn load_csv<P: AsRef<Path>>(&mut self, file_path: P) {
+        if let Ok(file) = File::open(file_path) {
+            let mut first_row: Option<Vec<String>> = None;
+
+            for result in BufReader::new(file).lines() {
+                if let Ok(l) = result {
+                    let row = l.split(',');
+
+                    if let Some(ref keys) = first_row {
+                        for (key, v) in keys.iter().zip(row) {
+                            self.push(key.clone(), vec![v.parse::<f32>().unwrap()]);
+                        }
+                    } else {
+                        first_row = Some(row.into_iter().map(|s| String::from(s)).collect());
+                    }
+                }
+            }
+        }
     }
 
     pub fn save_csv<'a, K>(&self, path: &Path, keys: K) -> Result<(), std::io::Error>

@@ -34,6 +34,8 @@ pub struct App {
     values: Values,
     windows: Vec<(Window, bool)>,
     #[serde(skip, default)]
+    open_dialog: Option<FileDialog>,
+    #[serde(skip, default)]
     save_dialog: Option<FileDialog>,
 }
 
@@ -57,6 +59,7 @@ impl App {
             ws: None,
             values: Default::default(),
             windows: vec![],
+            open_dialog: None,
             save_dialog: None,
         }
     }
@@ -104,6 +107,12 @@ impl eframe::App for App {
                 ui.menu_button("File", |ui| {
                     #[cfg(not(target_arch = "wasm32"))]
                     {
+                        if ui.button("Open CSV").clicked() {
+                            let mut fd = FileDialog::open_file(None)
+                                .title("Open CSV");
+                            fd.open();
+                            self.open_dialog = Some(fd);
+                        }
                         if ui.button("Save as CSV").clicked() {
                             let mut fd = FileDialog::save_file(None)
                                 .default_filename("all.csv")
@@ -168,6 +177,15 @@ impl eframe::App for App {
             graph.0.show(ctx, &mut graph.1, &self.values);
         }
         self.windows.retain(|g| g.1);
+
+        if let Some(open_dialog) = self.open_dialog.as_mut() {
+            if open_dialog.show(ctx).selected() {
+                if let Some(path) = open_dialog.path() {
+                    let _ = self.values.load_csv(path);
+                }
+                self.open_dialog = None;
+            }
+        }
 
         if let Some(save_dialog) = self.save_dialog.as_mut() {
             if save_dialog.show(ctx).selected() {
