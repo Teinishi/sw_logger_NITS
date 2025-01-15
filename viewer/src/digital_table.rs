@@ -82,7 +82,7 @@ impl ColumnProperty {
         }
     }
 
-    fn format(&self, value: f32) -> (String, bool) {
+    fn format(&self, value: f32) -> (String, Option<String>) {
         match self.decode_type {
             DecodeType::Float32 => {
                 let bits = f32::to_bits(value);
@@ -93,7 +93,7 @@ impl ColumnProperty {
                         BinaryDisplayStyle::Oct => format!("{:011o}", bits),
                         BinaryDisplayStyle::Bin => format!("{:032b}", bits),
                     },
-                    false,
+                    None,
                 )
             }
             DecodeType::Int24 => {
@@ -105,10 +105,14 @@ impl ColumnProperty {
                         BinaryDisplayStyle::Oct => format!("{:08o}", bits),
                         BinaryDisplayStyle::Bin => format!("{:024b}", bits),
                     },
-                    value.fract() != 0.0,
+                    if value.fract() != 0.0 {
+                        Some(format!("Not integer ({:.4})", value))
+                    } else {
+                        None
+                    },
                 )
             }
-            DecodeType::RealNumber => (value.to_string(), false),
+            DecodeType::RealNumber => (value.to_string(), None),
         }
     }
 }
@@ -270,11 +274,12 @@ impl DigitalTableWindow {
                                 let offset = max_len - it.len();
                                 if offset <= index {
                                     if let Some(v) = it.get(index - offset) {
-                                        let (s, l) = column.format(*v);
-                                        if l {
-                                            ui.colored_label(Color32::from_rgb(255, 0, 0), s);
+                                        let (label_text, tooltip) = column.format(*v);
+                                        if let Some(tooltip_text) = tooltip {
+                                            ui.colored_label(Color32::from_rgb(255, 0, 0), label_text)
+                                                .on_hover_text(tooltip_text);
                                         } else {
-                                            ui.label(s);
+                                            ui.label(label_text);
                                         }
                                     } else {
                                         *iter = None;
