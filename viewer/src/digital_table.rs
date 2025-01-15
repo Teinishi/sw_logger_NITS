@@ -1,7 +1,7 @@
 use crate::values::Values;
 use egui::{vec2, Color32, Context, Id, Layout, Ui};
 use egui_extras::{Column, TableBuilder};
-use egui_file::FileDialog;
+//use egui_file::FileDialog;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
@@ -134,8 +134,8 @@ pub struct DigitalTableWindow {
     id: Id,
     selector: ColumnProperty,
     columns: Vec<ColumnProperty>,
-    #[serde(skip, default)]
-    save_dialog: Option<FileDialog>,
+    /*#[serde(skip, default)]
+    save_dialog: Option<FileDialog>,*/
 }
 
 impl DigitalTableWindow {
@@ -144,17 +144,17 @@ impl DigitalTableWindow {
             id: Id::new(id),
             selector: Default::default(),
             columns: vec![],
-            save_dialog: None,
+            //save_dialog: None,
         }
     }
 
-    pub fn title(&self) -> String {
+    /*pub fn title(&self) -> String {
         self.columns
             .iter()
             .map(|c| c.get_title(" "))
             .collect::<Vec<_>>()
             .join(",")
-    }
+    }*/
 
     pub fn show(&mut self, ctx: &Context, open: &mut bool, values: &Values) {
         egui::Window::new("Digital Table")
