@@ -2,6 +2,7 @@ use crate::{
     graph::{LineGraph, XYGraph},
     table::TableWindow,
     values::Values,
+    digital_table::DigitalTableWindow,
 };
 use egui::{ahash::HashMap, Context};
 use egui_file::FileDialog;
@@ -13,6 +14,7 @@ pub enum Window {
     LineGraph(Box<LineGraph>),
     XYGraph(Box<XYGraph>),
     Table(Box<TableWindow>),
+    DigitalTable(Box<DigitalTableWindow>),
 }
 
 impl Window {
@@ -21,6 +23,7 @@ impl Window {
             Window::LineGraph(w) => w.show(ctx, open, values),
             Window::XYGraph(w) => w.show(ctx, open, values),
             Window::Table(w) => w.show(ctx, open, values),
+            Window::DigitalTable(w) => w.show(ctx, open, values),
         }
     }
 }
@@ -147,6 +150,16 @@ impl eframe::App for App {
                 if ui.button("XY Graph").clicked() {
                     self.windows.push((
                         Window::XYGraph(Box::new(XYGraph::new(format!("xy_graph_{}", self.id)))),
+                        true,
+                    ));
+                    self.id += 1;
+                }
+                if ui.button("Digital Table").clicked() {
+                    self.windows.push((
+                        Window::DigitalTable(Box::new(DigitalTableWindow::new(format!(
+                            "digital_table_{}",
+                            self.id
+                        )))),
                         true,
                     ));
                     self.id += 1;
