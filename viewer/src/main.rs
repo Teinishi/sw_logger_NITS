@@ -19,7 +19,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "sw_logger",
+        "sw_logger_nits",
         native_options,
         Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
     )
