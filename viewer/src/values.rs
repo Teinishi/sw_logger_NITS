@@ -34,10 +34,22 @@ impl std::fmt::Display for NitsRelativeCarCount {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+pub struct NitsCommand(u32);
+
+impl NitsCommand {
+    pub fn get_command_type(&self) -> u8 {
+        (self.0 >> 24 & 0xFF).try_into().unwrap()
+    }
+    pub fn get_payload(&self) -> u32 {
+        self.0 & 0xFFFFFF
+    }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct NitsTick {
-    pub commonline: u32,
-    pub commands: BTreeMap<NitsRelativeCarCount, u32>,
+    pub commonline: NitsCommand,
+    pub commands: BTreeMap<NitsRelativeCarCount, NitsCommand>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
@@ -46,6 +58,7 @@ pub struct Values {
     max_len: usize,
     pub nits_timeline: VecDeque<NitsTick>,
     pub nits_senders: BTreeSet<NitsRelativeCarCount>,
+    pub nits_command_types: BTreeSet<u8>,
 }
 
 impl Serialize for Values {
@@ -83,6 +96,7 @@ impl Values {
             max_len,
             nits_timeline: VecDeque::new(),
             nits_senders: BTreeSet::new(),
+            nits_command_types: BTreeSet::new(),
         }
     }
 
@@ -126,11 +140,12 @@ impl Values {
         if let Some(n32) = data.get(&String::from("NITS N32")) {
             let len = n32.len();
             for (i, commonline_f) in n32.iter().enumerate() {
-                let commonline = commonline_f.to_bits();
-                let car_count_front = commonline & 15;
-                let car_count_back = commonline >> 5 & 15;
+                let commonline = NitsCommand(commonline_f.to_bits());
+                self.nits_command_types.insert(commonline.get_command_type());
+                let car_count_front = commonline.get_payload() & 15;
+                let car_count_back = commonline.get_payload() >> 5 & 15;
 
-                let mut commands: BTreeMap<NitsRelativeCarCount, u32> = BTreeMap::new();
+                let mut commands: BTreeMap<NitsRelativeCarCount, NitsCommand> = BTreeMap::new();
 
                 for j in -(car_count_front as isize)..=(car_count_back as isize) {
                     let key = NitsRelativeCarCount(j);
@@ -139,10 +154,12 @@ impl Values {
                         car_count_back.try_into().unwrap(),
                     );
                     if let Some(channel) = nits_data.get(&channel_number) {
-                        if let Some(command) = channel.get((i + channel.len()).saturating_sub(len))
+                        if let Some(c) = channel.get((i + channel.len()).saturating_sub(len))
                         {
-                            commands.insert(key, command.clone());
+                            let command = NitsCommand(*c);
                             self.nits_senders.insert(key);
+                            self.nits_command_types.insert(command.get_command_type());
+                            commands.insert(key, command);
                         }
                     }
                 }

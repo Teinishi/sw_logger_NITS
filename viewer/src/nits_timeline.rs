@@ -1,4 +1,4 @@
-use crate::values::{NitsRelativeCarCount, Values};
+use crate::values::{NitsRelativeCarCount, NitsCommand, Values};
 use egui::{vec2, Context, Id, Layout, RichText, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ impl std::fmt::Display for NitsSender {
 }
 
 enum TimelineRow {
-    Command(NitsSender, u32),
+    Command(NitsSender, NitsCommand),
     Blank(usize),
     Separator,
 }
@@ -39,6 +39,7 @@ impl TimelineRow {
 pub struct NitsTimelineWindow {
     id: Id,
     sender_filter: BTreeMap<NitsSender, bool>,
+    command_type_filter: BTreeMap<u8, bool>,
 }
 
 impl NitsTimelineWindow {
@@ -46,6 +47,7 @@ impl NitsTimelineWindow {
         Self {
             id: Id::new(id),
             sender_filter: BTreeMap::new(),
+            command_type_filter: BTreeMap::new(),
         }
     }
 
@@ -85,7 +87,20 @@ impl NitsTimelineWindow {
                         }
                     });
                 });
-                header.col(|_| {});
+                header.col(|ui| {
+                    if values.nits_command_types.len() > 0 {
+                        ui.menu_button("⏷", |ui| {
+                            for command_type in &values.nits_command_types {
+                                let mut checked = true;
+                                if let Some(c) = self.command_type_filter.get(command_type) {
+                                    checked = *c;
+                                }
+                                ui.checkbox(&mut checked, format!("0x{:02x}", command_type));
+                                self.command_type_filter.insert(*command_type, checked);
+                            }
+                        });
+                    }
+                });
                 for i in 0..24 {
                     header.col(|ui| {
                         ui.centered_and_justified(|ui| {
@@ -103,7 +118,7 @@ impl NitsTimelineWindow {
 
                         match timeline_row {
                             TimelineRow::Command(sender, value) => {
-                                self.command_row(row, &sender.to_string(), *value);
+                                self.command_row(row, &sender.to_string(), value);
                             },
                             TimelineRow::Blank(blank_count) => {
                                 self.blank_row(row, *blank_count);
@@ -131,18 +146,16 @@ impl NitsTimelineWindow {
         });
     }
 
-    fn command_row(&self, mut row: TableRow<'_, '_>, sender_label: &str, value: u32) {
+    fn command_row(&self, mut row: TableRow<'_, '_>, sender_label: &str, command: &NitsCommand) {
         row.col(|ui| {
             ui.label(sender_label);
         });
-        let command_type = value >> 24 & 0xFF;
-        let command_payload = value & 0xFFFFFF;
         row.col(|ui| {
-            ui.label(format!("0x{:02x}", command_type));
+            ui.label(format!("0x{:02x}", command.get_command_type()));
         });
         for i in (0..24).rev() {
             row.col(|ui| {
-                let bit = command_payload >> i & 1;
+                let bit = command.get_payload() >> i & 1;
                 if bit != 0 {
                     ui.painter().rect_filled(
                         ui.available_rect_before_wrap(),
@@ -158,7 +171,7 @@ impl NitsTimelineWindow {
     }
 
     fn get_timeline_rows(&self, values: &Values) -> Vec<TimelineRow> {
-        let show_commonline = *self.sender_filter.get(&NitsSender::CommonLine).unwrap_or(&true);
+        let commonline_pass_sender_filter = *self.sender_filter.get(&NitsSender::CommonLine).unwrap_or(&true);
 
         let nits_timeline = &values.nits_timeline;
         let len = nits_timeline.len();
@@ -170,11 +183,21 @@ impl NitsTimelineWindow {
 
             for (c, value) in &nits_tick.commands {
                 let sender = NitsSender::Command(*c);
-                if *self.sender_filter.get(&sender).unwrap_or(&true) {
+                let pass_sender_filter = *self.sender_filter
+                    .get(&sender)
+                    .unwrap_or(&true);
+                let pass_command_type_filter = *self.command_type_filter
+                    .get(&value.get_command_type())
+                    .unwrap_or(&true);
+                if pass_sender_filter && pass_command_type_filter {
                     rows_tmp.push(TimelineRow::Command(sender, *value));
                 }
             }
-            if show_commonline {
+
+            let commonline_pass_command_type_filter = *self.command_type_filter
+                .get(&nits_tick.commonline.get_command_type())
+                .unwrap_or(&true);
+            if commonline_pass_sender_filter && commonline_pass_command_type_filter {
                 rows_tmp.push(TimelineRow::Command(NitsSender::CommonLine, nits_tick.commonline));
             }
 
