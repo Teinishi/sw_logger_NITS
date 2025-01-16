@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
-    path::Path
+    path::Path,
 };
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
 pub struct NitsRelativeCarCount(isize); // 負の値が前方とする
 
 impl NitsRelativeCarCount {
@@ -34,10 +34,10 @@ impl std::fmt::Display for NitsRelativeCarCount {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct NitsTick {
     pub commonline: u32,
-    pub commands: BTreeMap<NitsRelativeCarCount, u32>
+    pub commands: BTreeMap<NitsRelativeCarCount, u32>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
@@ -45,6 +45,7 @@ pub struct Values {
     values: BTreeMap<String, VecDeque<f32>>,
     max_len: usize,
     pub nits_timeline: VecDeque<NitsTick>,
+    pub nits_senders: BTreeSet<NitsRelativeCarCount>,
 }
 
 impl Serialize for Values {
@@ -78,9 +79,10 @@ impl Default for Values {
 impl Values {
     pub fn with_capacity(max_len: usize) -> Self {
         Self {
-            values: Default::default(),
+            values: BTreeMap::new(),
             max_len,
-            nits_timeline: Default::default(),
+            nits_timeline: VecDeque::new(),
+            nits_senders: BTreeSet::new(),
         }
     }
 
@@ -116,13 +118,7 @@ impl Values {
         let mut nits_data: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
         for i in 0..=31 {
             if let Some(channel) = data.get(&String::from(format!("NITS N{:02}", i))) {
-                nits_data.insert(
-                    i,
-                    channel
-                        .iter()
-                        .map(|v| v.to_bits())
-                        .collect()
-                );
+                nits_data.insert(i, channel.iter().map(|v| v.to_bits()).collect());
             }
         }
 
@@ -138,10 +134,15 @@ impl Values {
 
                 for j in -(car_count_front as isize)..=(car_count_back as isize) {
                     let key = NitsRelativeCarCount(j);
-                    let channel_number = key.get_channel_number(car_count_front.try_into().unwrap(), car_count_back.try_into().unwrap());
+                    let channel_number = key.get_channel_number(
+                        car_count_front.try_into().unwrap(),
+                        car_count_back.try_into().unwrap(),
+                    );
                     if let Some(channel) = nits_data.get(&channel_number) {
-                        if let Some(command) = channel.get((i + channel.len()).saturating_sub(len)) {
+                        if let Some(command) = channel.get((i + channel.len()).saturating_sub(len))
+                        {
                             commands.insert(key, command.clone());
+                            self.nits_senders.insert(key);
                         }
                     }
                 }
