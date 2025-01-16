@@ -1,8 +1,9 @@
 use crate::{
+    digital_table::DigitalTableWindow,
     graph::{LineGraph, XYGraph},
+    nits_timeline::NitsTimelineWindow,
     table::TableWindow,
     values::Values,
-    digital_table::DigitalTableWindow,
 };
 use egui::{ahash::HashMap, Context};
 use egui_file::FileDialog;
@@ -15,6 +16,7 @@ pub enum Window {
     XYGraph(Box<XYGraph>),
     Table(Box<TableWindow>),
     DigitalTable(Box<DigitalTableWindow>),
+    NitsTimeline(Box<NitsTimelineWindow>),
 }
 
 impl Window {
@@ -24,6 +26,7 @@ impl Window {
             Window::XYGraph(w) => w.show(ctx, open, values),
             Window::Table(w) => w.show(ctx, open, values),
             Window::DigitalTable(w) => w.show(ctx, open, values),
+            Window::NitsTimeline(w) => w.show(ctx, open, values),
         }
     }
 }
@@ -81,9 +84,7 @@ impl eframe::App for App {
                     ewebsock::WsEvent::Message(WsMessage::Text(m)) => {
                         match serde_json::from_str::<HashMap<String, Vec<f32>>>(&m) {
                             Ok(v) => {
-                                for (k, v) in v {
-                                    self.values.push(k, v);
-                                }
+                                self.values.add_data(v);
                             }
                             Err(e) => {
                                 log::error!("failed to parse: {}", e);
@@ -95,9 +96,10 @@ impl eframe::App for App {
                     ewebsock::WsEvent::Closed => {
                         let ctx = ctx.clone();
                         let wakeup = move || ctx.request_repaint();
-                        self.ws = ewebsock::connect_with_wakeup(&self.server, Default::default(), wakeup)
-                            .map_err(|e| log::error!("failed to init websocket {}", e))
-                            .ok();
+                        self.ws =
+                            ewebsock::connect_with_wakeup(&self.server, Default::default(), wakeup)
+                                .map_err(|e| log::error!("failed to init websocket {}", e))
+                                .ok();
                         break;
                     }
                 }
@@ -111,8 +113,7 @@ impl eframe::App for App {
                     #[cfg(not(target_arch = "wasm32"))]
                     {
                         if ui.button("Open CSV").clicked() {
-                            let mut fd = FileDialog::open_file(None)
-                                .title("Open CSV");
+                            let mut fd = FileDialog::open_file(None).title("Open CSV");
                             fd.open();
                             self.open_dialog = Some(fd);
                         }
@@ -164,6 +165,16 @@ impl eframe::App for App {
                     ));
                     self.id += 1;
                 }
+                if ui.button("NITS Timeline").clicked() {
+                    self.windows.push((
+                        Window::NitsTimeline(Box::new(NitsTimelineWindow::new(format!(
+                            "nits_timeline_{}",
+                            self.id
+                        )))),
+                        true,
+                    ));
+                    self.id += 1;
+                }
             });
         });
 
@@ -174,9 +185,10 @@ impl eframe::App for App {
                     if ui.button("connect").clicked() {
                         let ctx = ctx.clone();
                         let wakeup = move || ctx.request_repaint();
-                        self.ws = ewebsock::connect_with_wakeup(&self.server, Default::default(), wakeup)
-                            .map_err(|e| log::error!("failed to init websocket {}", e))
-                            .ok();
+                        self.ws =
+                            ewebsock::connect_with_wakeup(&self.server, Default::default(), wakeup)
+                                .map_err(|e| log::error!("failed to init websocket {}", e))
+                                .ok();
                     }
                 } else if ui.button("disconnect").clicked() {
                     self.ws = None;

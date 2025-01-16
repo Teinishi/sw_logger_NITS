@@ -1,15 +1,50 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
-    path::Path,
+    path::Path
 };
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Deserialize)]
+pub struct NitsRelativeCarCount(isize); // 負の値が前方とする
+
+impl NitsRelativeCarCount {
+    pub fn get_channel_number(&self, car_count_front: usize, car_count_back: usize) -> usize {
+        // TODO: 各引数の範囲チェック
+        if self.0 < 0 {
+            (1 + car_count_front).saturating_sub(self.0.unsigned_abs())
+        } else if self.0 > 0 {
+            (31 + self.0.unsigned_abs()).saturating_sub(car_count_back)
+        } else {
+            16
+        }
+    }
+}
+
+impl std::fmt::Display for NitsRelativeCarCount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0 < 0 {
+            write!(f, "{} Front", (-self.0).to_string())
+        } else if self.0 > 0 {
+            write!(f, "{} Back", self.0.to_string())
+        } else {
+            write!(f, "Self")
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct NitsTick {
+    pub commonline: u32,
+    pub commands: BTreeMap<NitsRelativeCarCount, u32>
+}
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Values {
     values: BTreeMap<String, VecDeque<f32>>,
     max_len: usize,
+    pub nits_timeline: VecDeque<NitsTick>,
 }
 
 impl Serialize for Values {
@@ -45,6 +80,7 @@ impl Values {
         Self {
             values: Default::default(),
             max_len,
+            nits_timeline: Default::default(),
         }
     }
 
@@ -64,7 +100,7 @@ impl Values {
         }
     }
 
-    pub fn push(&mut self, key: String, values: Vec<f32>) {
+    fn push(&mut self, key: String, values: Vec<f32>) {
         let v = self
             .values
             .entry(key)
@@ -73,6 +109,58 @@ impl Values {
             v.drain(0..(v.len() + values.len() - self.max_len));
         }
         v.extend(values);
+    }
+
+    pub fn add_data<S: std::hash::BuildHasher>(&mut self, data: HashMap<String, Vec<f32>, S>) {
+        // NITS N01 から NITS N31 までの値を取得
+        let mut nits_data: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
+        for i in 0..=31 {
+            if let Some(channel) = data.get(&String::from(format!("NITS N{:02}", i))) {
+                nits_data.insert(
+                    i,
+                    channel
+                        .iter()
+                        .map(|v| v.to_bits())
+                        .collect()
+                );
+            }
+        }
+
+        // NITS N32 (コモンライン) を取得し、他のチャンネルの値と時系列的に紐づける
+        if let Some(n32) = data.get(&String::from("NITS N32")) {
+            let len = n32.len();
+            for (i, commonline_f) in n32.iter().enumerate() {
+                let commonline = commonline_f.to_bits();
+                let car_count_front = commonline & 15;
+                let car_count_back = commonline >> 5 & 15;
+
+                let mut commands: BTreeMap<NitsRelativeCarCount, u32> = BTreeMap::new();
+
+                for j in -(car_count_front as isize)..=(car_count_back as isize) {
+                    let key = NitsRelativeCarCount(j);
+                    let channel_number = key.get_channel_number(car_count_front.try_into().unwrap(), car_count_back.try_into().unwrap());
+                    if let Some(channel) = nits_data.get(&channel_number) {
+                        if let Some(command) = channel.get((i + channel.len()).saturating_sub(len)) {
+                            commands.insert(key, command.clone());
+                        }
+                    }
+                }
+
+                let drain = (self.nits_timeline.len() + 1).saturating_sub(self.max_len);
+                if drain > 0 {
+                    self.nits_timeline.drain(0..drain);
+                }
+                self.nits_timeline.push_back(NitsTick {
+                    commonline,
+                    commands,
+                });
+            }
+        }
+
+        // NITSに限らない通常のデータの処理
+        for (k, v) in data {
+            self.push(k, v);
+        }
     }
 
     pub fn contains_key(&self, key: &str) -> bool {
@@ -111,9 +199,11 @@ impl Values {
                     let row = l.split(',');
 
                     if let Some(ref keys) = first_row {
+                        let mut data = HashMap::new();
                         for (key, v) in keys.iter().zip(row) {
-                            self.push(key.clone(), vec![v.parse::<f32>().unwrap()]);
+                            data.insert(key.clone(), vec![v.parse::<f32>().unwrap()]);
                         }
+                        self.add_data(data);
                     } else {
                         first_row = Some(row.into_iter().map(|s| String::from(s)).collect());
                     }
