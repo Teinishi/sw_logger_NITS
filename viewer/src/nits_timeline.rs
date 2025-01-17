@@ -216,7 +216,7 @@ impl NitsTimelineWindow {
 
     fn blank_row(&self, mut row: TableRow<'_, '_>, blank_count: u32) {
         row.col(|ui| {
-            ui.label(format!("{} Blank Ticks", blank_count));
+            ui.label(RichText::new(format!("{} ticks", blank_count)).weak());
         });
     }
 
