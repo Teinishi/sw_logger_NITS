@@ -1,4 +1,4 @@
-use crate::values::Values;
+use crate::{range_check::RangeCheck, values::Values};
 use egui::{vec2, Color32, Context, Id, Layout, Ui};
 use egui_extras::{Column, TableBuilder};
 //use egui_file::FileDialog;
@@ -98,6 +98,8 @@ impl ColumnProperty {
             }
             DecodeType::Int24 => {
                 let bits = value.trunc() as u32;
+                let range_check =
+                    RangeCheck::new(value, (0.0, true), (((1 << 24) - 1) as f32, true));
                 (
                     match self.display_style {
                         BinaryDisplayStyle::Hex => format!("{:06x}", bits),
@@ -107,6 +109,8 @@ impl ColumnProperty {
                     },
                     if value.fract() != 0.0 {
                         Some(format!("Not integer ({:.4})", value))
+                    } else if !range_check.check() {
+                        Some(format!("Not within 24bit range ({:.4})", value))
                     } else {
                         None
                     },
@@ -276,8 +280,11 @@ impl DigitalTableWindow {
                                     if let Some(v) = it.get(index - offset) {
                                         let (label_text, tooltip) = column.format(*v);
                                         if let Some(tooltip_text) = tooltip {
-                                            ui.colored_label(Color32::from_rgb(255, 0, 0), label_text)
-                                                .on_hover_text(tooltip_text);
+                                            ui.colored_label(
+                                                Color32::from_rgb(255, 0, 0),
+                                                label_text,
+                                            )
+                                            .on_hover_text(tooltip_text);
                                         } else {
                                             ui.label(label_text);
                                         }
