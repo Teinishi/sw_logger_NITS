@@ -9,6 +9,67 @@ use std::{
 };
 use crate::settings::Settings;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct QueueMaxLen<T> {
+    vec: VecDeque<T>,
+    max_len: usize,
+}
+
+impl<T> QueueMaxLen<T> {
+    fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
+    fn with_capacity(max_len: usize) -> Self {
+        Self {
+            vec: VecDeque::new(),
+            max_len
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    fn iter(&self) -> std::collections::vec_deque::Iter<'_, T> {
+        self.vec.iter()
+    }
+
+    fn vec(&self) -> &VecDeque<T> {
+        &self.vec
+    }
+
+    fn set_max_len(&mut self, max_len: usize) {
+        let len = self.vec.len();
+        if len < max_len {
+            self.vec.reserve(max_len - len);
+        } else if len > max_len {
+            self.vec.drain(0..(len - max_len));
+        }
+        self.max_len = max_len;
+    }
+
+    fn push(&mut self, value: T) {
+        let new_len = self.vec.len() + 1;
+        if new_len > self.max_len {
+            self.vec.drain(0..(new_len - self.max_len));
+        }
+        self.vec.push_back(value);
+    }
+
+    fn extend(&mut self, values: Vec<T>) {
+        let new_len = self.vec.len() + values.len();
+        if new_len > self.max_len {
+            self.vec.drain(0..(new_len - self.max_len));
+        }
+        self.vec.extend(values);
+    }
+
+    fn back(&self) -> Option<&T> {
+        self.vec.back()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
 pub struct NitsRelativeCarCount(isize); // 負の値が前方とする
 
@@ -67,10 +128,10 @@ impl NitsTick {
 
 #[derive(Debug, Deserialize)]
 pub struct Values {
-    values: BTreeMap<String, VecDeque<f32>>,
+    values: BTreeMap<String, QueueMaxLen<f32>>,
     #[serde(skip)]
     settings: Rc<RefCell<Settings>>,
-    nits_timeline: VecDeque<NitsTick>,
+    nits_timeline: QueueMaxLen<NitsTick>,
     nits_senders: BTreeSet<NitsRelativeCarCount>,
     nits_command_types: BTreeSet<u8>,
 }
@@ -82,8 +143,8 @@ impl Serialize for Values {
     {
         #[derive(Serialize)]
         struct V {
-            values: BTreeMap<String, VecDeque<f32>>,
-            nits_timeline: VecDeque<NitsTick>,
+            values: BTreeMap<String, QueueMaxLen<f32>>,
+            nits_timeline: QueueMaxLen<NitsTick>,
             nits_senders: BTreeSet<NitsRelativeCarCount>,
             nits_command_types: BTreeSet<u8>,
         }
@@ -100,9 +161,9 @@ impl Serialize for Values {
                 values: self
                     .values
                     .iter()
-                    .map(|(k, _)| (k.clone(), VecDeque::new()))
+                    .map(|(k, _)| (k.clone(), QueueMaxLen::new()))
                     .collect(),
-                nits_timeline: VecDeque::new(),
+                nits_timeline: QueueMaxLen::new(),
                 nits_senders: BTreeSet::new(),
                 nits_command_types: BTreeSet::new(),
             }
@@ -113,10 +174,11 @@ impl Serialize for Values {
 
 impl Values {
     pub fn new(settings: Rc<RefCell<Settings>>) -> Self {
+        let max_len = settings.borrow().max_len();
         Self {
             values: BTreeMap::new(),
             settings,
-            nits_timeline: VecDeque::new(),
+            nits_timeline: QueueMaxLen::with_capacity(max_len),
             nits_senders: BTreeSet::new(),
             nits_command_types: BTreeSet::new(),
         }
@@ -126,16 +188,13 @@ impl Values {
         self.settings = settings;
     }
 
-    pub fn set_max_len(&mut self, max_len: usize) {
-        //self.max_len = max_len;
+    pub fn set_max_len(&mut self) {
+        let max_len = self.settings.borrow().max_len();
+
         for v in self.values.values_mut() {
-            if v.len() < max_len {
-                v.reserve(max_len - v.len());
-            }
-            if v.len() > max_len {
-                v.drain(0..(v.len() - max_len));
-            }
+            v.set_max_len(max_len);
         }
+        self.nits_timeline.set_max_len(max_len);
     }
 
     fn push(&mut self, key: String, values: Vec<f32>) {
@@ -143,16 +202,11 @@ impl Values {
         let v = self
             .values
             .entry(key)
-            .or_insert_with(|| VecDeque::with_capacity(max_len));
-        if v.len() + values.len() > max_len {
-            v.drain(0..(v.len() + values.len() - max_len));
-        }
+            .or_insert_with(|| QueueMaxLen::with_capacity(max_len));
         v.extend(values);
     }
 
     pub fn add_data<S: std::hash::BuildHasher>(&mut self, data: HashMap<String, Vec<f32>, S>) {
-        let max_len = self.settings.borrow().max_len();
-
         // NITS N01 から NITS N31 までの値を取得
         let mut nits_data: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
         for i in 0..=31 {
@@ -189,11 +243,7 @@ impl Values {
                     }
                 }
 
-                let drain = (self.nits_timeline.len() + 1).saturating_sub(max_len);
-                if drain > 0 {
-                    self.nits_timeline.drain(0..drain);
-                }
-                self.nits_timeline.push_back(NitsTick {
+                self.nits_timeline.push(NitsTick {
                     commonline,
                     commands,
                 });
@@ -222,7 +272,10 @@ impl Values {
     }
 
     pub fn values_for_key(&self, key: &str) -> Option<&VecDeque<f32>> {
-        self.values.get(key)
+        match self.values.get(key) {
+            Some(q) => Some(q.vec()),
+            None => None
+        }
     }
 
     pub fn get_last_value_for_key(&self, key: &str) -> Option<f32> {
@@ -234,7 +287,7 @@ impl Values {
     }
 
     pub fn get_nits_timeline(&self) -> &VecDeque<NitsTick> {
-        &self.nits_timeline
+        &self.nits_timeline.vec()
     }
 
     pub fn get_nits_senders(&self) -> &BTreeSet<NitsRelativeCarCount> {

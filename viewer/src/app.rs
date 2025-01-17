@@ -150,6 +150,7 @@ impl eframe::App for App {
                                 .radio_value(&mut self.settings.borrow_mut().retention_period, len, label)
                                 .clicked()
                             {
+                                self.values.set_max_len();
                                 ui.close_menu();
                             }
                         }

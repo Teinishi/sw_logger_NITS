@@ -200,12 +200,15 @@ impl NitsTimelineWindow {
                 rows_tmp.push(TimelineRow::Command(NitsSender::CommonLine, *nits_tick.get_commonline()));
             }
 
-            if (rows_tmp.len() > 0 || is_last) && blank_count > 0 {
-                timeline_rows.push(TimelineRow::Blank(blank_count));
-                if !is_last {
+            if blank_count > 0 {
+                if rows_tmp.len() > 0 {
+                    timeline_rows.push(TimelineRow::Blank(blank_count));
                     timeline_rows.push(TimelineRow::Separator);
+                    blank_count = 0;
+                } else if is_last {
+                    timeline_rows.push(TimelineRow::Blank(blank_count + 1));
+                    blank_count = 0;
                 }
-                blank_count = 0;
             }
 
             if rows_tmp.len() > 0 {
