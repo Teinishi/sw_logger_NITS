@@ -86,17 +86,29 @@ impl Serialize for Values {
             nits_senders: BTreeSet<NitsRelativeCarCount>,
             nits_command_types: BTreeSet<u8>,
         }
-        V {
-            values: self
-                .values
-                .iter()
-                .map(|(k, _)| (k.clone(), VecDeque::new()))
-                .collect(),
-            max_len: self.max_len,
-            keep_values: self.keep_values,
-            nits_timeline: self.nits_timeline.clone(),
-            nits_senders: self.nits_senders.clone(),
-            nits_command_types: self.nits_command_types.clone(),
+
+        if self.keep_values {
+            V {
+                values: self.values.clone(),
+                max_len: self.max_len,
+                keep_values: self.keep_values,
+                nits_timeline: self.nits_timeline.clone(),
+                nits_senders: self.nits_senders.clone(),
+                nits_command_types: self.nits_command_types.clone(),
+            }
+        } else {
+            V {
+                values: self
+                    .values
+                    .iter()
+                    .map(|(k, _)| (k.clone(), VecDeque::new()))
+                    .collect(),
+                max_len: self.max_len,
+                keep_values: self.keep_values,
+                nits_timeline: VecDeque::new(),
+                nits_senders: BTreeSet::new(),
+                nits_command_types: BTreeSet::new(),
+            }
         }
         .serialize(serializer)
     }
