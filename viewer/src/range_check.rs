@@ -8,7 +8,14 @@ pub struct RangeCheck<T> {
 }
 
 impl<T: std::cmp::PartialOrd + Clone> RangeCheck<T> {
-    pub fn lower_bound(value: T, min: (T, bool)) -> Self {
+    pub fn new(value: T, min: (T, bool), max: (T, bool)) -> Self {
+        Self {
+            value,
+            min: Some(min),
+            max: Some(max),
+        }
+    }
+    /*pub fn lower_bound(value: T, min: (T, bool)) -> Self {
         Self {
             value,
             min: Some(min),
@@ -21,14 +28,7 @@ impl<T: std::cmp::PartialOrd + Clone> RangeCheck<T> {
             min: None,
             max: Some(max),
         }
-    }
-    pub fn upper_and_lower_bound(value: T, min: (T, bool), max: (T, bool)) -> Self {
-        Self {
-            value,
-            min: Some(min),
-            max: Some(max),
-        }
-    }
+    }*/
 
     pub fn check(&self) -> bool {
         if let Some((min, min_eq)) = &self.min {

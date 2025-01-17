@@ -30,9 +30,9 @@ impl<T> QueueMaxLen<T> {
         }
     }
 
-    fn len(&self) -> usize {
+    /*fn len(&self) -> usize {
         self.vec.len()
-    }
+    }*/
 
     fn iter(&self) -> std::collections::vec_deque::Iter<'_, T> {
         self.vec.iter()
@@ -83,11 +83,11 @@ impl NitsRelativeCarCount {
         car_count_back: u32,
     ) -> Result<u32, OutOfRangeError<i32>> {
         let c = self.0;
-        RangeCheck::upper_and_lower_bound(c, (-15, true), (15, true))
+        RangeCheck::new(c, (-15, true), (15, true))
             .check_result("NitsRelativeCarCount".to_string())?;
-        RangeCheck::upper_and_lower_bound(car_count_front as i32, (0, true), (15, false))
+        RangeCheck::new(car_count_front as i32, (0, true), (15, false))
             .check_result("car_count_front".to_string())?;
-        RangeCheck::upper_and_lower_bound(car_count_front as i32, (0, true), (15, false))
+        RangeCheck::new(car_count_front as i32, (0, true), (15, false))
             .check_result("car_count_back".to_string())?;
 
         if c < 0 {
