@@ -1,13 +1,16 @@
+use crate::{
+    range_check::{OutOfRangeError, RangeCheck},
+    settings::Settings,
+};
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
     fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
     path::Path,
     rc::Rc,
-    cell::RefCell,
 };
-use crate::settings::Settings;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct QueueMaxLen<T> {
@@ -23,7 +26,7 @@ impl<T> QueueMaxLen<T> {
     fn with_capacity(max_len: usize) -> Self {
         Self {
             vec: VecDeque::new(),
-            max_len
+            max_len,
         }
     }
 
@@ -74,14 +77,25 @@ impl<T> QueueMaxLen<T> {
 pub struct NitsRelativeCarCount(i32); // 負の値が前方とする
 
 impl NitsRelativeCarCount {
-    pub fn get_channel_number(&self, car_count_front: u32, car_count_back: u32) -> u32 {
-        // TODO: 各引数の範囲チェック
-        if self.0 < 0 {
-            (1 + car_count_front).saturating_sub(self.0.unsigned_abs())
-        } else if self.0 > 0 {
-            (31 + self.0.unsigned_abs()).saturating_sub(car_count_back)
+    pub fn get_channel_number(
+        &self,
+        car_count_front: u32,
+        car_count_back: u32,
+    ) -> Result<u32, OutOfRangeError<i32>> {
+        let c = self.0;
+        RangeCheck::upper_and_lower_bound(c, (-15, true), (15, true))
+            .check_result("NitsRelativeCarCount".to_string())?;
+        RangeCheck::upper_and_lower_bound(car_count_front as i32, (0, true), (15, false))
+            .check_result("car_count_front".to_string())?;
+        RangeCheck::upper_and_lower_bound(car_count_front as i32, (0, true), (15, false))
+            .check_result("car_count_back".to_string())?;
+
+        if c < 0 {
+            Ok(1 + car_count_front - c.unsigned_abs())
+        } else if c > 0 {
+            Ok(31 + c.unsigned_abs() - car_count_back)
         } else {
-            16
+            Ok(16)
         }
     }
 }
@@ -195,6 +209,7 @@ impl Values {
             v.set_max_len(max_len);
         }
         self.nits_timeline.set_max_len(max_len);
+        self.update_nits();
     }
 
     fn push(&mut self, key: String, values: Vec<f32>) {
@@ -233,12 +248,14 @@ impl Values {
                         car_count_front.try_into().unwrap(),
                         car_count_back.try_into().unwrap(),
                     );
-                    if let Some(channel) = nits_data.get(&channel_number) {
-                        if let Some(c) = channel.get((i + channel.len()).saturating_sub(len)) {
-                            let command = NitsCommand(*c);
-                            self.nits_senders.insert(key);
-                            self.nits_command_types.insert(command.get_command_type());
-                            commands.insert(key, command);
+                    if let Ok(ch) = channel_number {
+                        if let Some(channel) = nits_data.get(&ch) {
+                            if let Some(c) = channel.get((i + channel.len()).saturating_sub(len)) {
+                                let command = NitsCommand(*c);
+                                self.nits_senders.insert(key);
+                                self.nits_command_types.insert(command.get_command_type());
+                                commands.insert(key, command);
+                            }
                         }
                     }
                 }
@@ -253,6 +270,20 @@ impl Values {
         // NITSに限らない通常のデータの処理
         for (k, v) in data {
             self.push(k, v);
+        }
+    }
+
+    fn update_nits(&mut self) {
+        // nits_senders と nits_command_types をリセット
+        self.nits_senders = BTreeSet::new();
+        self.nits_command_types = BTreeSet::new();
+        for nits_tick in self.nits_timeline.iter() {
+            self.nits_command_types
+                .insert(nits_tick.commonline.get_command_type());
+            for (sender, command) in &nits_tick.commands {
+                self.nits_senders.insert(*sender);
+                self.nits_command_types.insert(command.get_command_type());
+            }
         }
     }
 
@@ -274,7 +305,7 @@ impl Values {
     pub fn values_for_key(&self, key: &str) -> Option<&VecDeque<f32>> {
         match self.values.get(key) {
             Some(q) => Some(q.vec()),
-            None => None
+            None => None,
         }
     }
 
