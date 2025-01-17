@@ -46,7 +46,7 @@ impl NitsCommand {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct NitsTick {
     commonline: NitsCommand,
     commands: BTreeMap<NitsRelativeCarCount, NitsCommand>,
@@ -66,11 +66,9 @@ impl NitsTick {
 pub struct Values {
     values: BTreeMap<String, VecDeque<f32>>,
     max_len: usize,
-    #[serde(skip, default)]
+    keep_values: bool,
     nits_timeline: VecDeque<NitsTick>,
-    #[serde(skip, default)]
     nits_senders: BTreeSet<NitsRelativeCarCount>,
-    #[serde(skip, default)]
     nits_command_types: BTreeSet<u8>,
 }
 
@@ -81,16 +79,24 @@ impl Serialize for Values {
     {
         #[derive(Serialize)]
         struct V {
-            values: BTreeMap<String, Vec<f32>>,
+            values: BTreeMap<String, VecDeque<f32>>,
             max_len: usize,
+            keep_values: bool,
+            nits_timeline: VecDeque<NitsTick>,
+            nits_senders: BTreeSet<NitsRelativeCarCount>,
+            nits_command_types: BTreeSet<u8>,
         }
         V {
             values: self
                 .values
                 .iter()
-                .map(|(k, _)| (k.clone(), vec![]))
+                .map(|(k, _)| (k.clone(), VecDeque::new()))
                 .collect(),
             max_len: self.max_len,
+            keep_values: self.keep_values,
+            nits_timeline: self.nits_timeline.clone(),
+            nits_senders: self.nits_senders.clone(),
+            nits_command_types: self.nits_command_types.clone(),
         }
         .serialize(serializer)
     }
@@ -107,6 +113,7 @@ impl Values {
         Self {
             values: BTreeMap::new(),
             max_len,
+            keep_values: false,
             nits_timeline: VecDeque::new(),
             nits_senders: BTreeSet::new(),
             nits_command_types: BTreeSet::new(),
@@ -127,6 +134,14 @@ impl Values {
                 v.drain(0..(v.len() - max_len));
             }
         }
+    }
+
+    pub fn keep_values(&self) -> bool {
+        self.keep_values
+    }
+
+    pub fn set_keep_values(&mut self, keep_values: bool) {
+        self.keep_values = keep_values;
     }
 
     fn push(&mut self, key: String, values: Vec<f32>) {

@@ -63,7 +63,7 @@ impl App {
             id: 0,
             server,
             ws: None,
-            values: Default::default(),
+            values: Values::default(),
             windows: vec![],
             open_dialog: None,
             save_dialog: None,
@@ -139,12 +139,18 @@ impl eframe::App for App {
                             ("15min", 60 * 60 * 15),
                             ("30min", 60 * 60 * 30),
                         ] {
-                            if ui.radio(self.values.max_len() == len, label).clicked() {
+                            if ui
+                                .radio(self.values.max_len() == len, label)
+                                .clicked()
+                            {
                                 self.values.set_max_len(len);
                                 ui.close_menu();
                             }
                         }
                     });
+                    let mut keep_values = self.values.keep_values();
+                    ui.checkbox(&mut keep_values, "Kepp values on quit");
+                    self.values.set_keep_values(keep_values);
                 });
                 egui::widgets::reset_button(ui, &mut self.values, "Reset");
                 ui.separator();
