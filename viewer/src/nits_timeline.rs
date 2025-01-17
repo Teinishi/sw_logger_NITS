@@ -1,10 +1,10 @@
-use crate::values::{NitsRelativeCarCount, NitsCommand, Values};
-use egui::{vec2, Context, Id, Layout, RichText, Ui};
+use crate::values::{NitsCommandType, NitsCommand, NitsRelativeCarCount, Values};
+use egui::{vec2, Checkbox, Context, Id, Layout, RichText, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 
-#[derive(PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 enum NitsSender {
     Command(NitsRelativeCarCount),
     CommonLine,
@@ -35,19 +35,99 @@ impl TimelineRow {
     }
 }
 
+enum CheckboxState {
+    Checked,
+    Unchecked,
+    Indeterminate,
+}
+
+#[derive(Serialize, Deserialize)]
+struct FilterUiMap<T: Ord> {
+    map: BTreeMap<T, bool>,
+}
+
+impl<T: Ord + std::fmt::Display> FilterUiMap<T> {
+    fn new() -> Self {
+        Self {
+            map: BTreeMap::new(),
+        }
+    }
+
+    fn get(&self, key: &T) -> Option<&bool> {
+        self.map.get(key)
+    }
+
+    fn set(&mut self, key: T, value: bool) {
+        self.map.insert(key, value);
+    }
+
+    fn set_default(&mut self, key: T, default: bool) {
+        if !self.map.contains_key(&key) {
+            self.set(key, default);
+        }
+    }
+
+    fn get_all(&self) -> CheckboxState {
+        let mut all_true = true;
+        let mut all_false = true;
+        for v in self.map.values() {
+            if *v {
+                all_false = false;
+            } else {
+                all_true = false;
+            }
+        }
+
+        if all_true {
+            CheckboxState::Checked
+        } else if all_false {
+            CheckboxState::Unchecked
+        } else {
+            CheckboxState::Indeterminate
+        }
+    }
+
+    fn set_all(&mut self, value: bool) {
+        for v in self.map.values_mut() {
+            *v = value;
+        }
+    }
+
+    fn add_all_checkbox(&mut self, ui: &mut Ui, label: &str) {
+        let (mut checked, indeterminate) = match self.get_all() {
+            CheckboxState::Checked => (true, false),
+            CheckboxState::Unchecked => (false, false),
+            CheckboxState::Indeterminate => (false, true),
+        };
+        if ui
+            .add(Checkbox::new(&mut checked, label).indeterminate(indeterminate))
+            .clicked()
+        {
+            self.set_all(checked);
+        }
+    }
+
+    fn add_checkboxes(&mut self, ui: &mut Ui, all_label: &str) {
+        self.add_all_checkbox(ui, all_label);
+        for (key, mut value) in self.map.iter_mut() {
+            ui.checkbox(&mut value, key.to_string());
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct NitsTimelineWindow {
     id: Id,
-    sender_filter: BTreeMap<NitsSender, bool>,
-    command_type_filter: BTreeMap<u8, bool>,
+    sender_filter: FilterUiMap<NitsSender>,
+    command_type_filter: FilterUiMap<NitsCommandType>,
 }
 
 impl NitsTimelineWindow {
     pub fn new(id: impl Hash) -> Self {
         Self {
             id: Id::new(id),
-            sender_filter: BTreeMap::new(),
-            command_type_filter: BTreeMap::new(),
+            sender_filter: FilterUiMap::new(),
+            command_type_filter: FilterUiMap::new(),
         }
     }
 
@@ -73,34 +153,31 @@ impl NitsTimelineWindow {
                 header.col(|ui| {
                     ui.style_mut().spacing.item_spacing = vec2(4.0, 0.0);
                     ui.strong("Sender");
+
                     ui.menu_button("⏷", |ui| {
-                        for sender in values.get_nits_senders()
+                        for sender in values
+                            .get_nits_senders()
                             .iter()
                             .map(|s| NitsSender::Command(*s))
-                            .chain([NitsSender::CommonLine]) {
-                            let mut checked = true;
-                            if let Some(c) = self.sender_filter.get(&sender) {
-                                checked = *c;
-                            }
-                            ui.checkbox(&mut checked, sender.to_string());
-                            self.sender_filter.insert(sender, checked);
+                            .chain([NitsSender::CommonLine])
+                        {
+                            self.sender_filter.set_default(sender, true);
                         }
+                        self.sender_filter.add_checkboxes(ui, "All");
                     });
                 });
+
                 header.col(|ui| {
                     if values.get_nits_command_types().len() > 0 {
                         ui.menu_button("⏷", |ui| {
                             for command_type in values.get_nits_command_types() {
-                                let mut checked = true;
-                                if let Some(c) = self.command_type_filter.get(command_type) {
-                                    checked = *c;
-                                }
-                                ui.checkbox(&mut checked, format!("0x{:02x}", command_type));
-                                self.command_type_filter.insert(*command_type, checked);
+                                self.command_type_filter.set_default(*command_type, true);
                             }
+                            self.command_type_filter.add_checkboxes(ui, "All");
                         });
                     }
                 });
+
                 for i in 0..24 {
                     header.col(|ui| {
                         ui.centered_and_justified(|ui| {
@@ -110,25 +187,22 @@ impl NitsTimelineWindow {
                 }
             })
             .body(|body| {
-                body.heterogeneous_rows(
-                    timeline_rows.iter().map(|r| r.get_height()),
-                    |row| {
-                        let index = row.index();
-                        let timeline_row = &timeline_rows[index];
+                body.heterogeneous_rows(timeline_rows.iter().map(|r| r.get_height()), |row| {
+                    let index = row.index();
+                    let timeline_row = &timeline_rows[index];
 
-                        match timeline_row {
-                            TimelineRow::Command(sender, value) => {
-                                self.command_row(row, &sender.to_string(), value);
-                            },
-                            TimelineRow::Blank(blank_count) => {
-                                self.blank_row(row, *blank_count);
-                            }
-                            TimelineRow::Separator => {
-                                self.separator_row(row);
-                            },
+                    match timeline_row {
+                        TimelineRow::Command(sender, value) => {
+                            self.command_row(row, &sender.to_string(), value);
+                        }
+                        TimelineRow::Blank(blank_count) => {
+                            self.blank_row(row, *blank_count);
+                        }
+                        TimelineRow::Separator => {
+                            self.separator_row(row);
                         }
                     }
-                );
+                });
             });
     }
 
@@ -151,7 +225,7 @@ impl NitsTimelineWindow {
             ui.label(sender_label);
         });
         row.col(|ui| {
-            ui.label(format!("0x{:02x}", command.get_command_type()));
+            ui.label(command.get_command_type().to_string());
         });
         for i in (0..24).rev() {
             row.col(|ui| {
@@ -171,7 +245,10 @@ impl NitsTimelineWindow {
     }
 
     fn get_timeline_rows(&self, values: &Values) -> Vec<TimelineRow> {
-        let commonline_pass_sender_filter = *self.sender_filter.get(&NitsSender::CommonLine).unwrap_or(&true);
+        let commonline_pass_sender_filter = *self
+            .sender_filter
+            .get(&NitsSender::CommonLine)
+            .unwrap_or(&true);
 
         let len = values.get_nits_timeline().len();
         let mut timeline_rows: Vec<TimelineRow> = Vec::new();
@@ -182,10 +259,9 @@ impl NitsTimelineWindow {
 
             for (c, value) in nits_tick.get_commands() {
                 let sender = NitsSender::Command(*c);
-                let pass_sender_filter = *self.sender_filter
-                    .get(&sender)
-                    .unwrap_or(&true);
-                let pass_command_type_filter = *self.command_type_filter
+                let pass_sender_filter = *self.sender_filter.get(&sender).unwrap_or(&true);
+                let pass_command_type_filter = *self
+                    .command_type_filter
                     .get(&value.get_command_type())
                     .unwrap_or(&true);
                 if pass_sender_filter && pass_command_type_filter {
@@ -193,11 +269,15 @@ impl NitsTimelineWindow {
                 }
             }
 
-            let commonline_pass_command_type_filter = *self.command_type_filter
+            let commonline_pass_command_type_filter = *self
+                .command_type_filter
                 .get(&nits_tick.get_commonline().get_command_type())
                 .unwrap_or(&true);
             if commonline_pass_sender_filter && commonline_pass_command_type_filter {
-                rows_tmp.push(TimelineRow::Command(NitsSender::CommonLine, *nits_tick.get_commonline()));
+                rows_tmp.push(TimelineRow::Command(
+                    NitsSender::CommonLine,
+                    *nits_tick.get_commonline(),
+                ));
             }
 
             if blank_count > 0 {

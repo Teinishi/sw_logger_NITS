@@ -112,12 +112,21 @@ impl std::fmt::Display for NitsRelativeCarCount {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
+pub struct NitsCommandType(u8);
+
+impl std::fmt::Display for NitsCommandType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{:02x}", self.0)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub struct NitsCommand(u32);
 
 impl NitsCommand {
-    pub fn get_command_type(&self) -> u8 {
-        (self.0 >> 24 & 0xFF).try_into().unwrap()
+    pub fn get_command_type(&self) -> NitsCommandType {
+        NitsCommandType((self.0 >> 24 & 0xFF).try_into().unwrap())
     }
     pub fn get_payload(&self) -> u32 {
         self.0 & 0xFFFFFF
@@ -147,7 +156,7 @@ pub struct Values {
     settings: Rc<RefCell<Settings>>,
     nits_timeline: QueueMaxLen<NitsTick>,
     nits_senders: BTreeSet<NitsRelativeCarCount>,
-    nits_command_types: BTreeSet<u8>,
+    nits_command_types: BTreeSet<NitsCommandType>,
 }
 
 impl Serialize for Values {
@@ -160,7 +169,7 @@ impl Serialize for Values {
             values: BTreeMap<String, QueueMaxLen<f32>>,
             nits_timeline: QueueMaxLen<NitsTick>,
             nits_senders: BTreeSet<NitsRelativeCarCount>,
-            nits_command_types: BTreeSet<u8>,
+            nits_command_types: BTreeSet<NitsCommandType>,
         }
 
         if self.settings.borrow().keep_values {
@@ -325,7 +334,7 @@ impl Values {
         &self.nits_senders
     }
 
-    pub fn get_nits_command_types(&self) -> &BTreeSet<u8> {
+    pub fn get_nits_command_types(&self) -> &BTreeSet<NitsCommandType> {
         &self.nits_command_types
     }
 
