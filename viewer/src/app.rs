@@ -1,7 +1,9 @@
+use std::{cell::RefCell, rc::Rc};
 use crate::{
     digital_table::DigitalTableWindow,
     graph::{LineGraph, XYGraph},
     nits_timeline::NitsTimelineWindow,
+    settings::Settings,
     table::TableWindow,
     values::Values,
 };
@@ -38,6 +40,7 @@ pub struct App {
     #[serde(skip, default)]
     ws: Option<(WsSender, WsReceiver)>,
     values: Values,
+    settings: Rc<RefCell<Settings>>,
     windows: Vec<(Window, bool)>,
     #[serde(skip, default)]
     open_dialog: Option<FileDialog>,
@@ -48,7 +51,9 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext) -> Self {
         if let Some(storage) = cc.storage {
-            if let Some(app) = eframe::get_value(storage, eframe::APP_KEY) {
+            let app_op: Option<App> = eframe::get_value(storage, eframe::APP_KEY);
+            if let Some(mut app) = app_op {
+                app.values.set_settings(Rc::clone(&app.settings));
                 return app;
             }
         }
@@ -59,11 +64,13 @@ impl App {
         };
         #[cfg(not(target_arch = "wasm32"))]
         let server = "ws://127.0.0.1:8080/socket".into();
+        let settings = Rc::new(RefCell::new(Settings::default()));
         Self {
             id: 0,
             server,
             ws: None,
-            values: Values::default(),
+            values: Values::new(Rc::clone(&settings)),
+            settings,
             windows: vec![],
             open_dialog: None,
             save_dialog: None,
@@ -140,19 +147,18 @@ impl eframe::App for App {
                             ("30min", 60 * 60 * 30),
                         ] {
                             if ui
-                                .radio(self.values.max_len() == len, label)
+                                .radio_value(&mut self.settings.borrow_mut().retention_period, len, label)
                                 .clicked()
                             {
-                                self.values.set_max_len(len);
                                 ui.close_menu();
                             }
                         }
                     });
-                    let mut keep_values = self.values.keep_values();
-                    ui.checkbox(&mut keep_values, "Kepp values on quit");
-                    self.values.set_keep_values(keep_values);
+                    ui.checkbox(&mut self.settings.borrow_mut().keep_values, "Kepp values on quit")
                 });
-                egui::widgets::reset_button(ui, &mut self.values, "Reset");
+                if ui.button("Reset").clicked() {
+                    self.values = Values::new(Rc::clone(&self.settings));
+                }
                 ui.separator();
                 if ui.button("XY Graph").clicked() {
                     self.windows.push((

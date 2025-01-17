@@ -4,7 +4,10 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, BufWriter, Write},
     path::Path,
+    rc::Rc,
+    cell::RefCell,
 };
+use crate::settings::Settings;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
 pub struct NitsRelativeCarCount(isize); // 負の値が前方とする
@@ -62,11 +65,11 @@ impl NitsTick {
     }
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Values {
     values: BTreeMap<String, VecDeque<f32>>,
-    max_len: usize,
-    keep_values: bool,
+    #[serde(skip)]
+    settings: Rc<RefCell<Settings>>,
     nits_timeline: VecDeque<NitsTick>,
     nits_senders: BTreeSet<NitsRelativeCarCount>,
     nits_command_types: BTreeSet<u8>,
@@ -80,18 +83,14 @@ impl Serialize for Values {
         #[derive(Serialize)]
         struct V {
             values: BTreeMap<String, VecDeque<f32>>,
-            max_len: usize,
-            keep_values: bool,
             nits_timeline: VecDeque<NitsTick>,
             nits_senders: BTreeSet<NitsRelativeCarCount>,
             nits_command_types: BTreeSet<u8>,
         }
 
-        if self.keep_values {
+        if self.settings.borrow().keep_values {
             V {
                 values: self.values.clone(),
-                max_len: self.max_len,
-                keep_values: self.keep_values,
                 nits_timeline: self.nits_timeline.clone(),
                 nits_senders: self.nits_senders.clone(),
                 nits_command_types: self.nits_command_types.clone(),
@@ -103,8 +102,6 @@ impl Serialize for Values {
                     .iter()
                     .map(|(k, _)| (k.clone(), VecDeque::new()))
                     .collect(),
-                max_len: self.max_len,
-                keep_values: self.keep_values,
                 nits_timeline: VecDeque::new(),
                 nits_senders: BTreeSet::new(),
                 nits_command_types: BTreeSet::new(),
@@ -114,30 +111,23 @@ impl Serialize for Values {
     }
 }
 
-impl Default for Values {
-    fn default() -> Self {
-        Self::with_capacity(3600)
-    }
-}
-
 impl Values {
-    pub fn with_capacity(max_len: usize) -> Self {
+    pub fn new(settings: Rc<RefCell<Settings>>) -> Self {
         Self {
             values: BTreeMap::new(),
-            max_len,
-            keep_values: false,
+            settings,
             nits_timeline: VecDeque::new(),
             nits_senders: BTreeSet::new(),
             nits_command_types: BTreeSet::new(),
         }
     }
 
-    pub fn max_len(&self) -> usize {
-        self.max_len
+    pub fn set_settings(&mut self, settings: Rc<RefCell<Settings>>) {
+        self.settings = settings;
     }
 
     pub fn set_max_len(&mut self, max_len: usize) {
-        self.max_len = max_len;
+        //self.max_len = max_len;
         for v in self.values.values_mut() {
             if v.len() < max_len {
                 v.reserve(max_len - v.len());
@@ -148,26 +138,21 @@ impl Values {
         }
     }
 
-    pub fn keep_values(&self) -> bool {
-        self.keep_values
-    }
-
-    pub fn set_keep_values(&mut self, keep_values: bool) {
-        self.keep_values = keep_values;
-    }
-
     fn push(&mut self, key: String, values: Vec<f32>) {
+        let max_len = self.settings.borrow().max_len();
         let v = self
             .values
             .entry(key)
-            .or_insert_with(|| VecDeque::with_capacity(self.max_len));
-        if v.len() + values.len() > self.max_len {
-            v.drain(0..(v.len() + values.len() - self.max_len));
+            .or_insert_with(|| VecDeque::with_capacity(max_len));
+        if v.len() + values.len() > max_len {
+            v.drain(0..(v.len() + values.len() - max_len));
         }
         v.extend(values);
     }
 
     pub fn add_data<S: std::hash::BuildHasher>(&mut self, data: HashMap<String, Vec<f32>, S>) {
+        let max_len = self.settings.borrow().max_len();
+
         // NITS N01 から NITS N31 までの値を取得
         let mut nits_data: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
         for i in 0..=31 {
@@ -204,7 +189,7 @@ impl Values {
                     }
                 }
 
-                let drain = (self.nits_timeline.len() + 1).saturating_sub(self.max_len);
+                let drain = (self.nits_timeline.len() + 1).saturating_sub(max_len);
                 if drain > 0 {
                     self.nits_timeline.drain(0..drain);
                 }

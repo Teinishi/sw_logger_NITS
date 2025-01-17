@@ -6,6 +6,7 @@ mod table;
 mod digital_table;
 mod nits_timeline;
 mod values;
+mod settings;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
