@@ -21,7 +21,7 @@ impl std::fmt::Display for NitsSender {
 
 enum TimelineRow {
     Command(NitsSender, NitsCommand),
-    Blank(usize),
+    Blank(u32),
     Separator,
 }
 
@@ -140,7 +140,7 @@ impl NitsTimelineWindow {
         }
     }
 
-    fn blank_row(&self, mut row: TableRow<'_, '_>, blank_count: usize) {
+    fn blank_row(&self, mut row: TableRow<'_, '_>, blank_count: u32) {
         row.col(|ui| {
             ui.label(format!("{} Blank Ticks", blank_count));
         });

@@ -71,10 +71,10 @@ impl<T> QueueMaxLen<T> {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
-pub struct NitsRelativeCarCount(isize); // 負の値が前方とする
+pub struct NitsRelativeCarCount(i32); // 負の値が前方とする
 
 impl NitsRelativeCarCount {
-    pub fn get_channel_number(&self, car_count_front: usize, car_count_back: usize) -> usize {
+    pub fn get_channel_number(&self, car_count_front: u32, car_count_back: u32) -> u32 {
         // TODO: 各引数の範囲チェック
         if self.0 < 0 {
             (1 + car_count_front).saturating_sub(self.0.unsigned_abs())
@@ -208,7 +208,7 @@ impl Values {
 
     pub fn add_data<S: std::hash::BuildHasher>(&mut self, data: HashMap<String, Vec<f32>, S>) {
         // NITS N01 から NITS N31 までの値を取得
-        let mut nits_data: BTreeMap<usize, Vec<u32>> = BTreeMap::new();
+        let mut nits_data: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
         for i in 0..=31 {
             if let Some(channel) = data.get(&String::from(format!("NITS N{:02}", i))) {
                 nits_data.insert(i, channel.iter().map(|v| v.to_bits()).collect());
@@ -227,7 +227,7 @@ impl Values {
 
                 let mut commands: BTreeMap<NitsRelativeCarCount, NitsCommand> = BTreeMap::new();
 
-                for j in -(car_count_front as isize)..=(car_count_back as isize) {
+                for j in -(car_count_front as i32)..=(car_count_back as i32) {
                     let key = NitsRelativeCarCount(j);
                     let channel_number = key.get_channel_number(
                         car_count_front.try_into().unwrap(),

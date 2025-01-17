@@ -35,7 +35,7 @@ impl Window {
 
 #[derive(Serialize, Deserialize)]
 pub struct App {
-    id: usize,
+    id: u32,
     server: String,
     #[serde(skip, default)]
     ws: Option<(WsSender, WsReceiver)>,

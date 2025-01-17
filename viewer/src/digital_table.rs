@@ -47,7 +47,7 @@ struct ColumnProperty {
     decode_type: DecodeType,
     display_style: BinaryDisplayStyle,
     title: Option<String>,
-    width: Option<usize>,
+    width: Option<u32>,
 }
 
 impl ColumnProperty {
@@ -64,7 +64,7 @@ impl ColumnProperty {
         }
     }
 
-    fn get_width(&self) -> usize {
+    fn get_width(&self) -> u32 {
         match self.decode_type {
             DecodeType::Float32 => match self.display_style {
                 BinaryDisplayStyle::Hex => 8,
