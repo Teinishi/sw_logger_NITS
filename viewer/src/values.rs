@@ -48,17 +48,30 @@ impl NitsCommand {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct NitsTick {
-    pub commonline: NitsCommand,
-    pub commands: BTreeMap<NitsRelativeCarCount, NitsCommand>,
+    commonline: NitsCommand,
+    commands: BTreeMap<NitsRelativeCarCount, NitsCommand>,
+}
+
+impl NitsTick {
+    pub fn get_commonline(&self) -> &NitsCommand {
+        &self.commonline
+    }
+
+    pub fn get_commands(&self) -> &BTreeMap<NitsRelativeCarCount, NitsCommand> {
+        &self.commands
+    }
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Values {
     values: BTreeMap<String, VecDeque<f32>>,
     max_len: usize,
-    pub nits_timeline: VecDeque<NitsTick>,
-    pub nits_senders: BTreeSet<NitsRelativeCarCount>,
-    pub nits_command_types: BTreeSet<u8>,
+    #[serde(skip, default)]
+    nits_timeline: VecDeque<NitsTick>,
+    #[serde(skip, default)]
+    nits_senders: BTreeSet<NitsRelativeCarCount>,
+    #[serde(skip, default)]
+    nits_command_types: BTreeSet<u8>,
 }
 
 impl Serialize for Values {
@@ -141,7 +154,8 @@ impl Values {
             let len = n32.len();
             for (i, commonline_f) in n32.iter().enumerate() {
                 let commonline = NitsCommand(commonline_f.to_bits());
-                self.nits_command_types.insert(commonline.get_command_type());
+                self.nits_command_types
+                    .insert(commonline.get_command_type());
                 let car_count_front = commonline.get_payload() & 15;
                 let car_count_back = commonline.get_payload() >> 5 & 15;
 
@@ -154,8 +168,7 @@ impl Values {
                         car_count_back.try_into().unwrap(),
                     );
                     if let Some(channel) = nits_data.get(&channel_number) {
-                        if let Some(c) = channel.get((i + channel.len()).saturating_sub(len))
-                        {
+                        if let Some(c) = channel.get((i + channel.len()).saturating_sub(len)) {
                             let command = NitsCommand(*c);
                             self.nits_senders.insert(key);
                             self.nits_command_types.insert(command.get_command_type());
@@ -206,6 +219,18 @@ impl Values {
             .as_ref()
             .and_then(|v| v.back())
             .cloned()
+    }
+
+    pub fn get_nits_timeline(&self) -> &VecDeque<NitsTick> {
+        &self.nits_timeline
+    }
+
+    pub fn get_nits_senders(&self) -> &BTreeSet<NitsRelativeCarCount> {
+        &self.nits_senders
+    }
+
+    pub fn get_nits_command_types(&self) -> &BTreeSet<u8> {
+        &self.nits_command_types
     }
 
     pub fn load_csv<P: AsRef<Path>>(&mut self, file_path: P) {
