@@ -1,16 +1,18 @@
-use std::{cell::RefCell, rc::Rc};
 use crate::{
+    settings::Settings,
+    values::Values,
+};
+use super::{
     digital_table::DigitalTableWindow,
     graph::{LineGraph, XYGraph},
     nits_timeline::NitsTimelineWindow,
-    settings::Settings,
     table::TableWindow,
-    values::Values,
 };
 use egui::{ahash::HashMap, Context};
 use egui_file::FileDialog;
 use ewebsock::{WsMessage, WsReceiver, WsSender};
 use serde::{Deserialize, Serialize};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Serialize, Deserialize)]
 pub enum Window {
@@ -147,7 +149,11 @@ impl eframe::App for App {
                             ("30min", 60 * 60 * 30),
                         ] {
                             if ui
-                                .radio_value(&mut self.settings.borrow_mut().retention_period, len, label)
+                                .radio_value(
+                                    &mut self.settings.borrow_mut().retention_period,
+                                    len,
+                                    label,
+                                )
                                 .clicked()
                             {
                                 self.values.set_max_len();
@@ -155,7 +161,10 @@ impl eframe::App for App {
                             }
                         }
                     });
-                    ui.checkbox(&mut self.settings.borrow_mut().keep_values, "Kepp values on quit")
+                    ui.checkbox(
+                        &mut self.settings.borrow_mut().keep_values,
+                        "Kepp values on quit",
+                    )
                 });
                 if ui.button("Reset").clicked() {
                     self.values = Values::new(Rc::clone(&self.settings));

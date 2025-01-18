@@ -1,10 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app;
-mod graph;
-mod table;
-mod digital_table;
-mod nits_timeline;
+mod gui;
 mod values;
 mod nits;
 mod settings;
@@ -24,7 +20,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "sw_logger_nits",
         native_options,
-        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
+        Box::new(|cc| Ok(Box::new(gui::app::App::new(cc)))),
     )
 }
 
