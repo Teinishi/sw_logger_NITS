@@ -6,6 +6,7 @@ mod table;
 mod digital_table;
 mod nits_timeline;
 mod values;
+mod nits;
 mod settings;
 mod range_check;
 

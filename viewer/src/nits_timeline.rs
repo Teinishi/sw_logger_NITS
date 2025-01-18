@@ -1,23 +1,11 @@
-use crate::values::{NitsCommandType, NitsCommand, NitsRelativeCarCount, Values};
+use crate::{
+    nits::{NitsCommand, NitsCommandType, NitsSender},
+    values::Values,
+};
 use egui::{vec2, Checkbox, Context, Id, Layout, RichText, Ui};
 use egui_extras::{Column, TableBuilder, TableRow};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-enum NitsSender {
-    Command(NitsRelativeCarCount),
-    CommonLine,
-}
-
-impl std::fmt::Display for NitsSender {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Command(sender) => write!(f, "{}", sender.to_string()),
-            Self::CommonLine => write!(f, "Common Line"),
-        }
-    }
-}
 
 enum TimelineRow {
     Command(NitsSender, NitsCommand),
@@ -97,7 +85,7 @@ impl<T: Ord + std::fmt::Display> FilterUiMap<T> {
         let (mut checked, indeterminate) = match self.get_all() {
             CheckboxState::Checked => (true, false),
             CheckboxState::Unchecked => (false, false),
-            CheckboxState::Indeterminate => (false, true),
+            CheckboxState::Indeterminate => (true, true),
         };
         if ui
             .add(Checkbox::new(&mut checked, label).indeterminate(indeterminate))
@@ -225,11 +213,11 @@ impl NitsTimelineWindow {
             ui.label(sender_label);
         });
         row.col(|ui| {
-            ui.label(command.get_command_type().to_string());
+            ui.label(command.command_type().to_string());
         });
         for i in (0..24).rev() {
             row.col(|ui| {
-                let bit = command.get_payload() >> i & 1;
+                let bit = command.payload() >> i & 1;
                 if bit != 0 {
                     ui.painter().rect_filled(
                         ui.available_rect_before_wrap(),
@@ -257,12 +245,12 @@ impl NitsTimelineWindow {
             let is_last = t + 1 >= len;
             let mut rows_tmp: Vec<TimelineRow> = Vec::new();
 
-            for (c, value) in nits_tick.get_commands() {
+            for (c, value) in nits_tick.commands() {
                 let sender = NitsSender::Command(*c);
                 let pass_sender_filter = *self.sender_filter.get(&sender).unwrap_or(&true);
                 let pass_command_type_filter = *self
                     .command_type_filter
-                    .get(&value.get_command_type())
+                    .get(&value.command_type())
                     .unwrap_or(&true);
                 if pass_sender_filter && pass_command_type_filter {
                     rows_tmp.push(TimelineRow::Command(sender, *value));
@@ -271,12 +259,12 @@ impl NitsTimelineWindow {
 
             let commonline_pass_command_type_filter = *self
                 .command_type_filter
-                .get(&nits_tick.get_commonline().get_command_type())
+                .get(&nits_tick.commonline().command_type())
                 .unwrap_or(&true);
             if commonline_pass_sender_filter && commonline_pass_command_type_filter {
                 rows_tmp.push(TimelineRow::Command(
                     NitsSender::CommonLine,
-                    *nits_tick.get_commonline(),
+                    *nits_tick.commonline(),
                 ));
             }
 

@@ -1,5 +1,5 @@
 use crate::{
-    range_check::{OutOfRangeError, RangeCheck},
+    nits::{NitsCommand, NitsCommandType, NitsRelativeCarCount, NitsTick},
     settings::Settings,
 };
 use serde::{Deserialize, Serialize};
@@ -70,82 +70,6 @@ impl<T> QueueMaxLen<T> {
 
     fn back(&self) -> Option<&T> {
         self.vec.back()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
-pub struct NitsRelativeCarCount(i32); // 負の値が前方とする
-
-impl NitsRelativeCarCount {
-    pub fn get_channel_number(
-        &self,
-        car_count_front: u32,
-        car_count_back: u32,
-    ) -> Result<u32, OutOfRangeError<i32>> {
-        let c = self.0;
-        RangeCheck::new(c, (-15, true), (15, true))
-            .check_result("NitsRelativeCarCount".to_string())?;
-        RangeCheck::new(car_count_front as i32, (0, true), (15, false))
-            .check_result("car_count_front".to_string())?;
-        RangeCheck::new(car_count_front as i32, (0, true), (15, false))
-            .check_result("car_count_back".to_string())?;
-
-        if c < 0 {
-            Ok(1 + car_count_front - c.unsigned_abs())
-        } else if c > 0 {
-            Ok(31 + c.unsigned_abs() - car_count_back)
-        } else {
-            Ok(16)
-        }
-    }
-}
-
-impl std::fmt::Display for NitsRelativeCarCount {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0 < 0 {
-            write!(f, "{} Front", (-self.0).to_string())
-        } else if self.0 > 0 {
-            write!(f, "{} Back", self.0.to_string())
-        } else {
-            write!(f, "Self")
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Serialize, Deserialize)]
-pub struct NitsCommandType(u8);
-
-impl std::fmt::Display for NitsCommandType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{:02x}", self.0)
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-pub struct NitsCommand(u32);
-
-impl NitsCommand {
-    pub fn get_command_type(&self) -> NitsCommandType {
-        NitsCommandType((self.0 >> 24 & 0xFF).try_into().unwrap())
-    }
-    pub fn get_payload(&self) -> u32 {
-        self.0 & 0xFFFFFF
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct NitsTick {
-    commonline: NitsCommand,
-    commands: BTreeMap<NitsRelativeCarCount, NitsCommand>,
-}
-
-impl NitsTick {
-    pub fn get_commonline(&self) -> &NitsCommand {
-        &self.commonline
-    }
-
-    pub fn get_commands(&self) -> &BTreeMap<NitsRelativeCarCount, NitsCommand> {
-        &self.commands
     }
 }
 
@@ -243,16 +167,15 @@ impl Values {
         if let Some(n32) = data.get(&String::from("NITS N32")) {
             let len = n32.len();
             for (i, commonline_f) in n32.iter().enumerate() {
-                let commonline = NitsCommand(commonline_f.to_bits());
-                self.nits_command_types
-                    .insert(commonline.get_command_type());
-                let car_count_front = commonline.get_payload() & 15;
-                let car_count_back = commonline.get_payload() >> 5 & 15;
+                let commonline = NitsCommand::new(commonline_f.to_bits());
+                self.nits_command_types.insert(commonline.command_type());
+                let car_count_front = commonline.payload() & 15;
+                let car_count_back = commonline.payload() >> 5 & 15;
 
-                let mut commands: BTreeMap<NitsRelativeCarCount, NitsCommand> = BTreeMap::new();
+                let mut nits_tick = NitsTick::new(commonline);
 
                 for j in -(car_count_front as i32)..=(car_count_back as i32) {
-                    let key = NitsRelativeCarCount(j);
+                    let key = NitsRelativeCarCount::new(j);
                     let channel_number = key.get_channel_number(
                         car_count_front.try_into().unwrap(),
                         car_count_back.try_into().unwrap(),
@@ -260,19 +183,16 @@ impl Values {
                     if let Ok(ch) = channel_number {
                         if let Some(channel) = nits_data.get(&ch) {
                             if let Some(c) = channel.get((i + channel.len()).saturating_sub(len)) {
-                                let command = NitsCommand(*c);
+                                let command = NitsCommand::new(*c);
                                 self.nits_senders.insert(key);
-                                self.nits_command_types.insert(command.get_command_type());
-                                commands.insert(key, command);
+                                self.nits_command_types.insert(command.command_type());
+                                nits_tick.add_command(key, command);
                             }
                         }
                     }
                 }
 
-                self.nits_timeline.push(NitsTick {
-                    commonline,
-                    commands,
-                });
+                self.nits_timeline.push(nits_tick);
             }
         }
 
@@ -288,10 +208,10 @@ impl Values {
         self.nits_command_types = BTreeSet::new();
         for nits_tick in self.nits_timeline.iter() {
             self.nits_command_types
-                .insert(nits_tick.commonline.get_command_type());
-            for (sender, command) in &nits_tick.commands {
+                .insert(nits_tick.commonline().command_type());
+            for (sender, command) in nits_tick.commands() {
                 self.nits_senders.insert(*sender);
-                self.nits_command_types.insert(command.get_command_type());
+                self.nits_command_types.insert(command.command_type());
             }
         }
     }
