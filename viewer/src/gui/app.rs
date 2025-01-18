@@ -228,7 +228,8 @@ impl eframe::App for App {
         if let Some(open_dialog) = self.open_dialog.as_mut() {
             if open_dialog.show(ctx).selected() {
                 if let Some(path) = open_dialog.path() {
-                    let _ = self.values.load_csv(path);
+                    self.values = Values::new(Rc::clone(&self.settings));
+                    self.values.load_csv(path);
                 }
                 self.open_dialog = None;
             }
