@@ -1,107 +1,55 @@
-use std::fmt;
+use std::{
+    fmt,
+    ops::{Bound, RangeBounds},
+};
 
-#[derive(Debug)]
-pub struct RangeCheck<T> {
+pub fn range_check<T: PartialOrd>(
+    range: &impl RangeBounds<T>,
     value: T,
-    min: Option<(T, bool)>,
-    max: Option<(T, bool)>,
-}
-
-impl<T: std::cmp::PartialOrd + Clone> RangeCheck<T> {
-    pub fn new(value: T, min: (T, bool), max: (T, bool)) -> Self {
-        Self {
+) -> Result<(), OutOfRangeError<T>> {
+    if range.contains(&value) {
+        Ok(())
+    } else {
+        Err(OutOfRangeError {
             value,
-            min: Some(min),
-            max: Some(max),
-        }
-    }
-    /*pub fn lower_bound(value: T, min: (T, bool)) -> Self {
-        Self {
-            value,
-            min: Some(min),
-            max: None,
-        }
-    }
-    pub fn upper_bound(value: T, max: (T, bool)) -> Self {
-        Self {
-            value,
-            min: None,
-            max: Some(max),
-        }
-    }*/
-
-    pub fn check(&self) -> bool {
-        if let Some((min, min_eq)) = &self.min {
-            if *min_eq {
-                if self.value < *min {
-                    return false;
-                }
-            } else {
-                if self.value <= *min {
-                    return false;
-                }
-            }
-        }
-        if let Some((max, max_eq)) = &self.max {
-            if *max_eq {
-                if self.value > *max {
-                    return false;
-                }
-            } else {
-                if self.value >= *max {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    pub fn check_result(&self, name: String) -> Result<(), OutOfRangeError<T>> {
-        if self.check() {
-            Ok(())
-        } else {
-            Err(OutOfRangeError {
-                name,
-                value: self.value.clone(),
-                min: self.min.clone(),
-                max: self.max.clone(),
-            })
-        }
+            start: range.start_bound(),
+            end: range.end_bound(),
+        })
     }
 }
 
 #[derive(Debug)]
-pub struct OutOfRangeError<T> {
-    name: String,
+pub struct OutOfRangeError<'a, T> {
     value: T,
-    min: Option<(T, bool)>,
-    max: Option<(T, bool)>,
+    start: Bound<&'a T>,
+    end: Bound<&'a T>,
 }
 
-impl<T: fmt::Display> fmt::Display for OutOfRangeError<T> {
+impl<T: std::fmt::Display> fmt::Display for OutOfRangeError<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Value {}={} is out of range: expected ",
-            self.name, self.value
-        )?;
-        if let Some((min, eq)) = &self.min {
-            if *eq {
-                write!(f, "{} <= ", min)?;
-            } else {
-                write!(f, "{} < ", min)?;
+        write!(f, "Value {} is out of range: expected", self.value)?;
+        match self.start {
+            Bound::Excluded(v) => {
+                write!(f, "{}..", v)?;
+            }
+            Bound::Included(v) => {
+                write!(f, "{}..", v)?;
+            }
+            Bound::Unbounded => {
+                write!(f, "..")?;
             }
         }
-        write!(f, "{}", self.name)?;
-        if let Some((max, eq)) = &self.max {
-            if *eq {
-                write!(f, " <= {}", max)?;
-            } else {
-                write!(f, " < {}", max)?;
+        match self.end {
+            Bound::Excluded(v) => {
+                write!(f, "{}", v)?;
             }
+            Bound::Included(v) => {
+                write!(f, "={}", v)?;
+            }
+            Bound::Unbounded => {}
         }
         Ok(())
     }
 }
 
-impl<T: fmt::Display + fmt::Debug> std::error::Error for OutOfRangeError<T> {}
+impl<T: fmt::Display + fmt::Debug> std::error::Error for OutOfRangeError<'_, T> {}

@@ -1,4 +1,4 @@
-use crate::range_check::{OutOfRangeError, RangeCheck};
+use crate::range_check::{range_check, OutOfRangeError};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -16,12 +16,9 @@ impl NitsRelativeCarCount {
         car_count_back: u32,
     ) -> Result<u32, OutOfRangeError<i32>> {
         let c = self.0;
-        RangeCheck::new(c, (-15, true), (15, true))
-            .check_result("NitsRelativeCarCount".to_string())?;
-        RangeCheck::new(car_count_front as i32, (0, true), (15, false))
-            .check_result("car_count_front".to_string())?;
-        RangeCheck::new(car_count_front as i32, (0, true), (15, false))
-            .check_result("car_count_back".to_string())?;
+        range_check(&(-15..=15), c)?;
+        range_check(&(0..=15), car_count_front as i32)?;
+        range_check(&(0..=15), car_count_back as i32)?;
 
         if c < 0 {
             Ok(1 + car_count_front - c.unsigned_abs())

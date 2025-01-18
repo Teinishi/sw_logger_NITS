@@ -1,4 +1,4 @@
-use crate::{range_check::RangeCheck, values::Values};
+use crate::{range_check::range_check, values::Values};
 use egui::{vec2, Color32, Context, Id, Layout, Ui};
 use egui_extras::{Column, TableBuilder};
 //use egui_file::FileDialog;
@@ -98,8 +98,6 @@ impl ColumnProperty {
             }
             DecodeType::Int24 => {
                 let bits = value.trunc() as u32;
-                let range_check =
-                    RangeCheck::new(value, (0.0, true), (((1 << 24) - 1) as f32, true));
                 (
                     match self.display_style {
                         BinaryDisplayStyle::Hex => format!("{:06x}", bits),
@@ -109,7 +107,7 @@ impl ColumnProperty {
                     },
                     if value.fract() != 0.0 {
                         Some(format!("Not integer ({:.4})", value))
-                    } else if !range_check.check() {
+                    } else if let Err(_) = range_check(&(0.0..((1 << 24) as f32)), value) {
                         Some(format!("Not within 24bit range ({:.4})", value))
                     } else {
                         None
